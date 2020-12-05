@@ -1,4 +1,5 @@
 # Retinaface
+[![DOI](https://zenodo.org/badge/280950959.svg)](https://zenodo.org/badge/latestdoi/280950959)
 
 ![https://habrastorage.org/webt/uj/ff/vx/ujffvxxpzixwlmae8gyh7jylftq.jpeg](https://habrastorage.org/webt/uj/ff/vx/ujffvxxpzixwlmae8gyh7jylftq.jpeg)
 
@@ -15,7 +16,7 @@ IT added a set of functionality:
  * Syncronized BatchNorm
  * Support for various loggers like [W&B](https://www.wandb.com/) or [Neptune.ml](https://neptune.ai/)
 
-### Hyperparameters are fedined in config file
+### Hyperparameters are defined in the config file
 
 Hyperparameters that were scattered  across the code moved to the config at [retinadace/config](retinadace/config)
 
@@ -32,6 +33,28 @@ Color transforms are defined in the config.
 ### Added mAP calculation for validation
 In order to track thr progress, mAP metric is calculated on validation.
 
+## Installation
+
+`pip install -U retinaface_pytorch`
+
+## Example inference
+
+```python
+import cv2
+from retinaface.pre_trained_models import get_model
+```
+
+`image = <numpy array with shape (height, width, 3)>`
+
+```python
+model = get_model("resnet50_2020-07-20", max_size=2048)
+model.eval()
+annotation = model.predict_jsons(image)
+```
+
+* Jupyter notebook with the example: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1wLXZyoybDRKizfcIzxPwkeYp-XDpTM-K?usp=sharing)
+* Jupyter notebook with the example on how to combine face detector with mask detector: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/13Ktsrx164eQHfDmYLyMCoI-Kq0gC5Kg1?usp=sharing)
+
 ## Data Preparation
 
 The pipeline expects labels in the format:
@@ -42,39 +65,60 @@ The pipeline expects labels in the format:
     "file_name": "0--Parade/0_Parade_marchingband_1_849.jpg",
     "annotations": [
       {
-        "x_min": 449,
-        "y_min": 330,
-        "width": 122,
-        "height": 149,
+        "bbox": [
+          449,
+          330,
+          571,
+          720
+        ],
         "landmarks": [
-          488.906,1
-          373.643,
-          0.0,
-          542.089,
-          376.442,
-          0.0,
-          515.031,
-          412.83,
-          0.0,
-          485.174,
-          425.893,
-          0.0,
-          538.357,
-          431.491,
-          0.0,
-          0.82
+          [
+            488.906,
+            373.643
+          ],
+          [
+            542.089,
+            376.442
+          ],
+          [
+            515.031,
+            412.83
+          ],
+          [
+            485.174,
+            425.893
+          ],
+          [
+            538.357,
+            431.491
+          ]
         ]
       }
     ]
   },
 ```
 
+You can convert the default labels of the WiderFaces to the json of the propper format with this [script](https://github.com/ternaus/iglovikov_helper_functions/blob/master/iglovikov_helper_functions/data_processing/wider_face/prepare_data.py).
 
 
 ## Training
 
+### Define config
+Example configs could be found at [retinaface/configs](retinaface/configs)
+
+### Define environmental variables
+
+```bash
+export TRAIN_IMAGE_PATH=<path to train images>
+export VAL_IMAGE_PATH=<path to validation images>
+export TRAIN_LABEL_PATH=<path to train annotations>
+export VAL_LABEL_PATH=<path to validation annotations>
 ```
-python retinaface/train.py -h                                                                                                                                                                              (anaconda3)  15:14:11
+
+### Run training script
+
+```
+python retinaface/train.py -h
 usage: train.py [-h] -c CONFIG_PATH
 
 optional arguments:
@@ -87,30 +131,32 @@ optional arguments:
 ## Inference
 
 ```
-python retinaface/inference.py -h                                                                                                                                                                                (anaconda3)  14:47:09
+python retinaface/inference.py -h
 usage: inference.py [-h] -i INPUT_PATH -c CONFIG_PATH -o OUTPUT_PATH [-v]
-                    [-g NUM_GPUS] [-t TARGET_SIZE] [-m MAX_SIZE]
-                    [--origin_size]
+                    [-g NUM_GPUS] [-m MAX_SIZE] [-b BATCH_SIZE]
+                    [-j NUM_WORKERS]
                     [--confidence_threshold CONFIDENCE_THRESHOLD]
-                    [--nms_threshold NMS_THRESHOLD] [-w WEIGHT_PATH]
-                    [--keep_top_k KEEP_TOP_K]
+                    [--nms_threshold NMS_THRESHOLD] -w WEIGHT_PATH
+                    [--keep_top_k KEEP_TOP_K] [--world_size WORLD_SIZE]
+                    [--local_rank LOCAL_RANK] [--fp16]
 
 optional arguments:
   -h, --help            show this help message and exit
   -i INPUT_PATH, --input_path INPUT_PATH
                         Path with images.
   -c CONFIG_PATH, --config_path CONFIG_PATH
-                        Path with images.
+                        Path to config.
   -o OUTPUT_PATH, --output_path OUTPUT_PATH
                         Path to save jsons.
   -v, --visualize       Visualize predictions
   -g NUM_GPUS, --num_gpus NUM_GPUS
                         The number of GPUs to use.
-  -t TARGET_SIZE, --target_size TARGET_SIZE
-                        Target size
   -m MAX_SIZE, --max_size MAX_SIZE
-                        Target size
-  --origin_size         Whether use origin image size to evaluate
+                        Resize the largest side to this number
+  -b BATCH_SIZE, --batch_size BATCH_SIZE
+                        batch_size
+  -j NUM_WORKERS, --num_workers NUM_WORKERS
+                        num_workers
   --confidence_threshold CONFIDENCE_THRESHOLD
                         confidence_threshold
   --nms_threshold NMS_THRESHOLD
@@ -119,7 +165,21 @@ optional arguments:
                         Path to weights.
   --keep_top_k KEEP_TOP_K
                         keep_top_k
+  --world_size WORLD_SIZE
+                        number of nodes for distributed training
+  --local_rank LOCAL_RANK
+                        node rank for distributed training
+  --fp16                Use fp6
 ```
 
-[Weights](https://drive.google.com/drive/folders/1DuiwlTd1BbZ0ZzafrV7qMncko1Z5a412?usp=sharing) for the model
-with [config](retinaface/configs/2020-07-19.yaml).
+```
+python -m torch.distributed.launch --nproc_per_node=<num_gpus> retinaface/inference.py <parameters>
+```
+
+*  [Weights](https://drive.google.com/drive/folders/1DuiwlTd1BbZ0ZzafrV7qMncko1Z5a412?usp=sharing) for the model with [config](retinaface/configs/2020-07-19.yaml).
+*  [Weights](https://drive.google.com/file/d/1slNNW1bntYqDKpvi2r1QfcQAwnhsVw9n/view?usp=sharing) for the model with [config](retinaface/configs/2020-07-20.yaml).
+
+# Web app
+https://retinaface.herokuapp.com/
+
+Code for the web app: https://github.com/ternaus/retinaface_demo

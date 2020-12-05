@@ -1,11 +1,12 @@
-from typing import List
+from typing import List, Tuple, Union
 
 import numpy as np
 import torch
 
 
 def point_form(boxes: torch.Tensor) -> torch.Tensor:
-    """Convert prior_boxes to (x_min, y_min, x_max, y_max) representation for comparison to point form ground truth data.
+    """Convert prior_boxes to (x_min, y_min, x_max, y_max) representation for comparison
+    to point form ground truth data.
 
     Args:
         boxes: center-size default boxes from priorbox layers.
@@ -26,7 +27,7 @@ def center_size(boxes: torch.Tensor) -> torch.Tensor:
 
 
 def intersect(box_a: torch.Tensor, box_b: torch.Tensor) -> torch.Tensor:
-    """ We resize both tensors to [A,B,2] without new malloc:
+    """We resize both tensors to [A,B,2] without new malloc:
     [A, 2] -> [A, 1, 2] -> [A, B, 2]
     [B, 2] -> [1, B, 2] -> [A, B, 2]
     Then we compute the area of intersect between box_a and box_b.
@@ -125,14 +126,14 @@ def match(
     best_prior_idx_filter.squeeze_(1)
     best_prior_overlap.squeeze_(1)
     best_truth_overlap.index_fill_(0, best_prior_idx_filter, 2)  # ensure best prior
-    # TODO refactor: index  best_prior_idx with long tensor
+
     # ensure every gt matches with its prior of max overlap
     for j in range(best_prior_idx.size(0)):  # 判别此anchor是预测哪一个boxes
         best_truth_idx[best_prior_idx[j]] = j
 
-    matches = box_gt[best_truth_idx]  # Shape: [num_priors, 4] 此处为每一个anchor对应的bbox取出来
-    labels = labels_gt[best_truth_idx]  # Shape: [num_priors]      此处为每一个anchor对应的label取出来
-    labels[best_truth_overlap < threshold] = 0  # label as background   overlap<0.35的全部作为负样本
+    matches = box_gt[best_truth_idx]  # Shape: [num_priors, 4]
+    labels = labels_gt[best_truth_idx]  # Shape: [num_priors]
+    labels[best_truth_overlap < threshold] = 0  # label as background   overlap<0.35
     loc = encode(matches, priors, variances)
 
     matches_landm = landmarks_gt[best_truth_idx]
@@ -166,7 +167,9 @@ def encode(matched, priors, variances):
     return torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
 
 
-def encode_landm(matched: torch.Tensor, priors: torch.Tensor, variances: List[float]) -> torch.Tensor:
+def encode_landm(
+    matched: torch.Tensor, priors: torch.Tensor, variances: Union[List[float], Tuple[float, float]]
+) -> torch.Tensor:
     """Encode the variances from the priorbox layers into the ground truth boxes we have matched
     (based on jaccard overlap) with the prior boxes.
     Args:
@@ -188,15 +191,15 @@ def encode_landm(matched: torch.Tensor, priors: torch.Tensor, variances: List[fl
     priors = torch.cat([priors_cx, priors_cy, priors_w, priors_h], dim=2)
     g_cxcy = matched[:, :, :2] - priors[:, :, :2]
     # encode variance
-    g_cxcy /= variances[0] * priors[:, :, 2:]
-    # g_cxcy /= priors[:, :, 2:]
-    g_cxcy = g_cxcy.reshape(g_cxcy.size(0), -1)
+    g_cxcy = g_cxcy // variances[0] * priors[:, :, 2:]
     # return target for smooth_l1_loss
-    return g_cxcy
+    return g_cxcy.reshape(g_cxcy.size(0), -1)
 
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd
-def decode(loc: torch.Tensor, priors: torch.Tensor, variances: List[float]) -> torch.Tensor:
+def decode(
+    loc: torch.Tensor, priors: torch.Tensor, variances: Union[List[float], Tuple[float, float]]
+) -> torch.Tensor:
     """Decode locations from predictions using priors to undo the encoding we did for offset regression at train time.
     Args:
         loc: location predictions for loc layers,
@@ -207,7 +210,6 @@ def decode(loc: torch.Tensor, priors: torch.Tensor, variances: List[float]) -> t
     Return:
         decoded bounding box predictions
     """
-
     boxes = torch.cat(
         (
             priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
@@ -220,7 +222,9 @@ def decode(loc: torch.Tensor, priors: torch.Tensor, variances: List[float]) -> t
     return boxes
 
 
-def decode_landm(pre: torch.Tensor, priors: torch.Tensor, variances: List[float]) -> torch.Tensor:
+def decode_landm(
+    pre: torch.Tensor, priors: torch.Tensor, variances: Union[List[float], Tuple[float, float]]
+) -> torch.Tensor:
     """Decode landmarks from predictions using priors to undo the encoding we did for offset regression at train time.
     Args:
         pre: landmark predictions for loc layers,
